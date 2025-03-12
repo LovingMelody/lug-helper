@@ -793,6 +793,9 @@ preflight_check() {
     avx_check
     mapcount_check
     filelimit_check
+    if [ $is_nixos ]; then
+            nix_ld_check
+    fi
 
     # Populate info strings with the results and add formatting
     if [ "${#preflight_fail[@]}" -gt 0 ]; then
@@ -950,6 +953,22 @@ lutris_detect() {
     if [ -x "$(command -v flatpak)" ] && flatpak list --app | grep -q Lutris; then
             lutris_installed="true"
             lutris_flatpak="true"
+    fi
+}
+
+# Check if NixOS has nix-ld enabled
+# This is needed to run unpatched dynamic binaries on NixOS.
+# Which is used in the install script.
+# Documentation: https://github.com/nix-community/nix-ld
+nix_ld_check() {
+    if [ ! $is_nixos ]; then
+        return
+    fi
+
+    if [ -e '/run/current-system/sw/share/nix-ld/lib/ld.so' ]; then
+        preflight_pass+=("nix-ld is enabled on your system.")
+    else
+        preflight_fail+=("nix-ld does not appear to be enabled. This is needed for standalone installs.\nPlease refer our Quick Start Guide:\n$lug_wiki")
     fi
 }
 
@@ -2722,6 +2741,10 @@ install_game_wine() {
     if [ ! -f "$wine_launch_script" ]; then
         message error "Game launch script not found! Unable to proceed.\n\n$wine_launch_script\n\nIt is included in our official releases here:\n$releases_url"
         return 1
+    fi
+    # Double check nix-ld is enabled on NixOS
+    if [ "$is_nixos" -eq 1 ]  && [ ! -e '/run/current-system/sw/share/nix-ld/lib/ld.so' ]; then
+        message error "nix-ld is not enabled! Unable to proceed.\nPlease refer to our Quick Start Guide:\n$lug_wiki"
     fi
 
     # Call the preflight check and confirm the user is ready to proceed
